@@ -411,7 +411,7 @@ def _write_chunks_file(col) -> None:
     rows = sorted(zip(got["ids"], got["documents"], got["metadatas"]), key=lambda r: r[0])
     with chunks_file(col).open("w", encoding="utf-8") as f:
         for cid, doc, meta in rows:
-            f.write(json.dumps({"id": cid, "text": doc, "metadata": meta}, ensure_ascii=False) + "\n")
+            f.write(json.dumps({"id": cid, "text": doc, "metadata": meta}, ensure_ascii=False, sort_keys=True) + "\n")  # sorted: Chroma returns keys in varying order
 
 
 def indexed_sources(col=None) -> dict[str, str]:

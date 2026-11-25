@@ -17,7 +17,7 @@ Consolidated texts (the version in force today) from the BOE open-data API (`/da
 | LSV | Ley sobre Tráfico, Circulación de Vehículos a Motor y Seguridad Vial (RDL 6/2015) | [BOE-A-2015-11722](https://www.boe.es/buscar/act.php?id=BOE-A-2015-11722) | latest change 2026-10-01 | BOE reuse conditions (Resolución AEBOE 27-06-2024): commercial and non-commercial reuse allowed, cite the source, don't distort the meaning | 32,815 | 188 |
 | RGC | Reglamento General de Circulación (RD 1428/2003) | [BOE-A-2003-23514](https://www.boe.es/buscar/act.php?id=BOE-A-2003-23514) | latest change 2026-10-01 | same | 41,491 | 249 |
 | RGCond | Reglamento General de Conductores (RD 818/2009) | [BOE-A-2009-9481](https://www.boe.es/buscar/act.php?id=BOE-A-2009-9481) | latest change 2023-12-07 | same | 22,236 | 133 |
-| ITV *(added later, see "Adding a document")* | Real Decreto 920/2017, inspección técnica de vehículos | [BOE-A-2017-12841](https://www.boe.es/buscar/act.php?id=BOE-A-2017-12841) | | same | | 49 |
+| ITV *(added later, see "Adding a document")* | Real Decreto 920/2017, inspección técnica de vehículos | [BOE-A-2017-12841](https://www.boe.es/buscar/act.php?id=BOE-A-2017-12841) | consolidated text | same | 9,802 | 49 |
 | **Total (base corpus)** | | | | | **96,542** | **570** |
 
 Legislation contains no personal data. Annexes kept: LSV I-IV, VIII, IX (definitions, points table, courses, speeding-fine table); RGC II-III (sports events, special vehicles); RGCond III (documents for licences). Left out on purpose: card layouts, exam logistics, medical criteria and the sign catalogue (~60k words), which a driver's "what is the rule" question doesn't need and the daily embedding quota couldn't afford. Preambles are left out too, since they explain why the law changed, not what it says.
@@ -60,7 +60,7 @@ Hit = **every** expected passage (source + location) in the top k, over the 30 a
 | **G dense, English question** | **gemini-embedding-001** | 0.57 | 0.83 | **1.00** | **1.00** | 1319 |
 | H dense, Spanish rewrite | gemini-embedding-001 | 0.60 | 0.83 | 0.87 | 0.43 | 1298 |
 
-Words@1 / @3 for A: 244 / 717; for G see `eval/retrieval_summary.json`. Same chunks for every design; the two embedding models have separate ChromaDB collections (`trafico`, `trafico_e001`), since their vectors aren't comparable (cosine ~0.01 between the two models' vectors of the same chunk).
+Words added at k = 1 / 3: A 244 / 717, G 268 / 811. Same chunks for every design; the two embedding models have separate ChromaDB collections (`trafico`, `trafico_e001`), since their vectors aren't comparable (cosine ~0.01 between the two models' vectors of the same chunk).
 
 **Chosen: G (dense, gemini-embedding-001, on the user's question, k = 5).** The search tool returns 5 passages, so hit@5 is what decides whether the agent sees the evidence. G is the only design with every expected passage in the top 5 for all 30 answerable questions, including both passages of all 7 multi questions; A misses the second passage of q24, q26 and q27. The cost is ~14% more words in the prompt (1319 vs 1156) and a worse top-1/top-3 ranking, which matters less because the agent reads all 5. Rewriting the question into Spanish hurts with both models (B < A, H < G). A practical note: gemini-embedding-2 and its preview share one daily free quota (1,000), which the indexing used up; gemini-embedding-001 has its own. I keep G: retrieving all the passages an answer needs matters more than ranking the first relevant one higher, especially for multi-part legal questions where the limit and the penalty sit in different articles.
 
@@ -173,6 +173,10 @@ Unanswerable question **q31**: *"My car is 6 years old. How often does it need t
 | q19 | Correct 2-year rule, plus an uncited sentence saying very serious offences take longer, which no passage says. | Unsupported claim |
 | q22 | Judged wrong for leaving out the driver's hazard-light / warning-device duty, but the question asked what the *passengers* should do. My reference included the driver's duties, which the question didn't ask for. | Bad test question |
 | q26 | Right fine (300 €) and points (2), but it described the band as "31–40 km/h over" when the table's 151–170 km/h band on a 120 road is 31–50 over. | Wrong answer from the right passage |
+
+**Counts by cause** (4 failures out of 37): unsupported claim 2 (q35, q19), bad test question 1 (q22), wrong answer from the right passage 1 (q26), retrieval miss 0, wrong refusal 0.
+
+**What to fix first.** (1) Require the retrieved passages to establish that the rule applies to the user's specific case, otherwise refuse: this addresses q35, the most consequential failure. (2) Then stop unsupported extras (q19). (3) Then correct the q22 test reference, which affects the evaluation rather than user safety.
 
 The judge also marked the refusals of q31, q32, q34 and q36 as unsupported because they name where the rule lives (Código Penal, DGT, insurance legislation). I graded them as supported: they refuse correctly and only point the user to the right authority. I record these as a **judge-calibration issue, not an assistant failure**.
 
