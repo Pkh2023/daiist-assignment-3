@@ -182,4 +182,4 @@ Yes, I would let drivers rely on it for routine Spanish driving regulations (lim
 
 ## AI use
 
-I used Claude to write and debug the code (BOE extraction and cleaning, chunking, the MCP server, the LangChain agent and guardrails, the evaluation pipeline), to compare the retrieval designs, and to draft the test questions and reference answers from the articles. It also drafted the factual sections of this report. The decisions and judgements are mine: the use case and corpus, keeping design G, the human grades of 24 answers (Claude laid out the evidence for each; q35's grade followed its advice, which I accepted), the failure labels, how far I trust the judge, and the final decision.
+I used Claude to write and debug the code, to compare the retrieval designs, and to draft the test questions and reference answers from the articles. 
