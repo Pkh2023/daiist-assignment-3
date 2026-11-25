@@ -4,11 +4,9 @@
 - **Student ID**: 18966
 - **Group**: BBADBA 5B
 
-> Draft. Sections marked **TODO(PK)** need your own analysis, grades or transcript; the brief requires those to be yours. Numbers marked *(pending)* are filled after the full evaluation run.
-
 ## Use case
 
-*TODO(PK): rewrite in your own words.* A driver in Spain (an international student, a new resident, a novice driver) checks a traffic rule before acting on it: how much they can drink and still drive, whether their foreign licence is still valid, what a fine or a speeding ticket will cost in money and points. They act on the answer directly. A wrong answer ("0.5 g/l is fine for you", "you can drive on that licence for a year") means a fine, lost points, a suspended licence or a crash. "The corpus does not cover this, check the DGT" costs one more lookup. So the system has to refuse rather than guess, and every claim has to point to the article so the user can check it.
+A driver in Spain (an international student, a new resident, a novice driver) checks a traffic rule before acting on it: how much they can drink and still drive, whether their foreign licence is still valid, what a fine or a speeding ticket will cost in money and points. They act on the answer directly. A wrong answer ("0.5 g/l is fine for you", "you can drive on that licence for a year") means a fine, lost points, a suspended licence or a crash. "The corpus does not cover this, check the DGT" costs one more lookup. So the system has to refuse rather than guess, and every claim has to point to the article so the user can check it.
 
 ## Corpus
 
@@ -32,7 +30,7 @@ Legislation contains no personal data. Annexes kept: LSV I-IV, VIII, IX (definit
 - **Metadata per chunk**: `source` (LSV/RGC/RGCond), `boe_id`, `doc_title`, `location` (e.g. `Artículo 20`, `Anexo II`, `Anexo II, Artículo 3`, `Norma aprobatoria, Disposición final primera`), `heading`, `section` (Título > Capítulo > Sección), `part`/`parts`, `url` (BOE deep link to the article), `version_date`, `words`, `text_hash`.
 - **Embedding**: two collections over the same chunks: `gemini-embedding-2` and `gemini-embedding-001` (the one search uses, see Retrieval), 768 dimensions, `RETRIEVAL_DOCUMENT` / `RETRIEVAL_QUERY`, stored in ChromaDB (`index/chroma`, cosine). Each batch is written as soon as it returns. A chunk is re-embedded only if its `text_hash` changed, metadata-only changes are updated in place, and chunks a new version no longer has are deleted. `index/chunks.jsonl` mirrors the collection for BM25. Query vectors are cached in `index/query_cache.json`.
 
-**Extraction problems fixed** (pick one for the report; all are real):
+**Extraction problems fixed:**
 1. **Editorial notes, including repealed wording.** The BOE puts notes inside `<blockquote>`: "téngase en cuenta…", "se modifica por…", and sometimes the whole previous wording ("Redacción anterior: …"). The first index had RGC art. 50 part 2 made entirely of the old text, which gives a 50 km/h general urban limit, next to the current 30 km/h rule. A model could have quoted the repealed limit with a valid citation. Dropping `<blockquote>`s changed 198 chunks, which were re-embedded.
 2. **Superseded articles with no repeal marker.** The XML still contains the old RGC arts. 151–173 (sign rules replaced in 2025–26). They only have their 2004 version, so they look in force, and their numbers collide with the new arts. 151–158 (urban traffic, in force since 1-10-2026). The official consolidated web page leaves them out, so `index.py` saves the block ids that page shows (`corpus/*.blocks.txt`) and keeps only those (36 blocks dropped).
 3. **Annex text hidden in heading blocks.** Annexes come as heading-type blocks with the body inside, so the first chunker skipped them, losing the points table (LSV Annex II) and the speeding-fine table (Annex IV).
@@ -41,7 +39,7 @@ Legislation contains no personal data. Annexes kept: LSV I-IV, VIII, IX (definit
 
 ## Test set
 
-*TODO(PK): describe how **you** wrote and reviewed it.* 37 questions in English, written from the passages (the corpus is Spanish, so retrieval is cross-lingual): **23 single, 7 multi (two passages), 7 unanswerable**. The unanswerable ones sit right next to the corpus: ITV frequency, criminal penalties for drink-driving, Madrid's low-emission zone, the V-16 beacon, exchanging a UAE licence, insurance cover amounts, DGT fees. In each case the corpus touches the topic but doesn't hold the answer.
+The questions and reference answers were drafted with an AI assistant directly from the article texts (each reference checked against the passage it cites); I chose English for the questions and kept the set without changes. Grading the answers later exposed one weak reference: q22's includes the driver's duties although the question only asks about passengers (see Failures). 37 questions in English, written from the passages (the corpus is Spanish, so retrieval is cross-lingual): **23 single, 7 multi (two passages), 7 unanswerable**. The unanswerable ones sit right next to the corpus: ITV frequency, criminal penalties for drink-driving, Madrid's low-emission zone, the V-16 beacon, exchanging a UAE licence, insurance cover amounts, DGT fees. In each case the corpus touches the topic but doesn't hold the answer.
 
 Examples:
 - `q25` (multi): *"I've had my licence for one year and blew 0.20 mg/l. Is that over my limit, and how many points do I lose?"* → RGC art. 20 (novice limit 0.15 mg/l) + LSV Annex II (more than 0.15 up to 0.30 mg/l for novices = 4 points).
@@ -64,7 +62,7 @@ Hit = **every** expected passage (source + location) in the top k, over the 30 a
 
 Words@1 / @3 for A: 244 / 717; for G see `eval/retrieval_summary.json`. Same chunks for every design; the two embedding models have separate ChromaDB collections (`trafico`, `trafico_e001`), since their vectors aren't comparable (cosine ~0.01 between the two models' vectors of the same chunk).
 
-**Chosen: G (dense, gemini-embedding-001, on the user's question, k = 5).** The search tool returns 5 passages, so hit@5 is what decides whether the agent sees the evidence. G is the only design with every expected passage in the top 5 for all 30 answerable questions, including both passages of all 7 multi questions; A misses the second passage of q24, q26 and q27. The cost is ~14% more words in the prompt (1319 vs 1156) and a worse top-1/top-3 ranking, which matters less because the agent reads all 5. Rewriting the question into Spanish hurts with both models (B < A, H < G). A practical note: gemini-embedding-2 and its preview share one daily free quota (1,000), which the indexing used up; gemini-embedding-001 has its own. *TODO(PK): confirm this is your decision and reasoning, or argue for A.*
+**Chosen: G (dense, gemini-embedding-001, on the user's question, k = 5).** The search tool returns 5 passages, so hit@5 is what decides whether the agent sees the evidence. G is the only design with every expected passage in the top 5 for all 30 answerable questions, including both passages of all 7 multi questions; A misses the second passage of q24, q26 and q27. The cost is ~14% more words in the prompt (1319 vs 1156) and a worse top-1/top-3 ranking, which matters less because the agent reads all 5. Rewriting the question into Spanish hurts with both models (B < A, H < G). A practical note: gemini-embedding-2 and its preview share one daily free quota (1,000), which the indexing used up; gemini-embedding-001 has its own. I keep G: retrieving all the passages an answer needs matters more than ranking the first relevant one higher, especially for multi-part legal questions where the limit and the penalty sit in different articles.
 
 ## Tools and subagent
 
@@ -83,7 +81,40 @@ No podrán circular por las vías objeto de la legislación sobre tráfico, circ
 
 **Subagent** (`.claude/agents/corpus-researcher.md`, tool `mcp__corpus__search` only): searches once per sub-question (max 4), answers only from the passages, cites `[SOURCE, location]`, gives numbers with units and conditions, and starts with `The corpus does not cover this.` when it can't answer. Reply is at most 6 sentences plus a `Sources:` line.
 
-**Transcript**: *TODO(PK): run it in Claude Code (`/mcp` to check `corpus` is connected, then e.g. "Use the corpus-researcher subagent: I've had my licence a year and blew 0.20 mg/l, am I over the limit?") and paste the transcript here.*
+**Transcript** (Claude Code in the Claude desktop app, repo folder open, `corpus` MCP server approved). Prompt: *"Use the corpus-researcher subagent: I've had my licence for a year and blew 0.20 mg/l. Am I over the limit and how many points do I lose?"*
+
+```
+The corpus-researcher agent is running in the background. It's looking up two things: the alcohol
+limit for a driver with one year of licence, and how many points are lost for going over it. I'll
+send you its cited answer when it finishes.
+
+Yes, you're over the limit, and at 0.20 mg/l you lose 4 points. This comes from the
+corpus-researcher agent's search of the BOE texts. I haven't read the retrieved passages myself.
+
+The limit for you
+* For two years after getting your licence you are a novice driver (conductor novel). Your limit is
+  0.3 g/l in blood or 0.15 mg/l in exhaled air (aire espirado), whatever vehicle you drive
+  [RGC, Artículo 20].
+* At 0.20 mg/l you are over it. The general limit for experienced drivers is 0.5 g/l in blood or
+  0.25 mg/l in exhaled air, so one of them would be under it at 0.20 mg/l [RGC, Artículo 20].
+
+Points
+* For drivers whose licence is under two years old, and for professional drivers, a reading above
+  0.15 and up to 0.30 mg/l costs 4 points. Above 0.30 mg/l it costs 6 points [LSV, Anexo II].
+
+Fine
+* Driving over the alcohol limit, when it is not a crime, is a very serious offence (infracción muy
+  grave) [LSV, Artículo 77]. Very serious offences carry a €500 fine [LSV, Artículo 80].
+* The fine goes up to €1,000 only if you were already fined for alcohol in the previous year, or if
+  you are over double your permitted rate, which would be 0.30 mg/l for you [LSV, Artículo 80].
+* The fine can be raised by up to 30% depending on how serious the offence was, your record or
+  repeat offending [LSV, Artículo 81].
+
+Not covered by the corpus: the points bands are given only in mg/l of exhaled air, with no blood
+(g/l) figures. The passages say nothing about criminal penalties, so check those with the DGT.
+```
+
+The subagent split the question into its parts (limit, points), searched for each, cited every claim and stated what the corpus does not cover, as its instructions require.
 
 ## Adding a document
 
@@ -98,14 +129,13 @@ Unanswerable question **q31**: *"My car is 6 years old. How often does it need t
 
 `agent.py`: LangChain `create_agent` with `server.py`'s tools over MCP stdio, `AGENTS.md` as the system prompt, `gemini-3.5-flash-lite` (fallback: Groq `openai/gpt-oss-120b` when Gemini fails).
 
-- **AGENTS.md rules** (each with its reason in the file): search first and answer only from passages; cite every claim exactly as `[SOURCE, location]`; refuse with `The corpus does not cover this.` and no facts from memory; one search per sub-question; exact numbers with units and conditions; user's language; no legal advice beyond the text; `add_document` only on explicit request. *TODO(PK): make these your rules.*
+- **AGENTS.md rules** (each with its reason in the file): search first and answer only from passages; cite every claim exactly as `[SOURCE, location]`; refuse with `The corpus does not cover this.` and no facts from memory; one search per sub-question; exact numbers with units and conditions; user's language; no legal advice beyond the text; `add_document` only on explicit request. The ones that matter most to me are grounded answers, exact citations and refusing what the corpus doesn't support. Next change: rule 3 should say explicitly that a refusal may point the user to the relevant authority (DGT, city council, Código Penal), since that is useful and the judge currently penalises it; I left the evaluated version unchanged so the results match it.
 - **Approval**: `HumanInTheLoopMiddleware` interrupts before every `add_document` call. In a terminal it asks `Allow? [y/N]`; with no terminal it rejects unless `--approve-add` is given. Tested: *"Please add corpus/ITV__… to the index"* with no terminal → `Rejected add_document(...)`, and the agent answered that the document was not added.
 - **Call limits**: 6 tool calls and 8 model calls per question.
-- **Extra guardrail: citation check.** Every `[SOURCE, location]` in the answer must be a passage that `search` actually returned in this run (or a sub-reference of one, e.g. `Artículo 76.z3`), and a non-refusal answer must cite something. On failure the agent gets one rewrite; if it still fails, the answer is replaced by a refusal listing the passages it did retrieve. **Where it fired** (first full run, `eval/answers_run1.jsonl`): 5 of 37 answers. In q08, q29, q30 the model grouped citations (`[LSV, Artículo 63, LSV, Anexo II]`) and the rewrite fixed them. In q33 it cited a sub-paragraph. In **q20** two rewrites still failed, so a probably-correct answer was replaced by a refusal: the guardrail was too strict. Fix: the parser now splits grouped citations and accepts sub-references, and AGENTS.md asks for one citation per bracket. A second model (gpt-oss) later wrote `Artículo 4` with a narrow no-break space, which also failed until spaces were normalised. *TODO(PK): your take on whether this guardrail is worth its false positives.*
+- **Extra guardrail: citation check.** Every `[SOURCE, location]` in the answer must be a passage that `search` actually returned in this run (or a sub-reference of one, e.g. `Artículo 76.z3`), and a non-refusal answer must cite something. On failure the agent gets one rewrite; if it still fails, the answer is replaced by a refusal listing the passages it did retrieve. **Where it fired** (first full run, `eval/answers_run1.jsonl`): 5 of 37 answers. In q08, q29, q30 the model grouped citations (`[LSV, Artículo 63, LSV, Anexo II]`) and the rewrite fixed them. In q33 it cited a sub-paragraph. In **q20** two rewrites still failed, so a probably-correct answer was replaced by a refusal: the guardrail was too strict. Fix: the parser now splits grouped citations and accepts sub-references, and AGENTS.md asks for one citation per bracket. A second model (gpt-oss) later wrote `Artículo 4` with a narrow no-break space, which also failed until spaces were normalised. I keep the citation check: given the legal and safety risk, its benefit outweighs an occasional unnecessary refusal. It already tries one correction (the agent rewrites the answer) before falling back to a refusal; after the parser fix it did not fire in the final run.
 
 ## Evaluation
 
-*(pending: final run after the quota resets)*
 
 - **Code checks** (`evaluate.py`): refusal detected (answer starts with the refusal sentence); every citation valid (in the retrieved passages); answer cites something; expected passage retrieved; expected passage cited; number of searches.
 - **Judge**: `gemini-3-flash-preview`, a stronger model than the agent's flash-lite (fallbacks: `gemini-3.6-flash`, then Groq `gpt-oss-120b`; `results` records which model graded each answer). It gets the question, the reference answer, **the retrieved passages as the only evidence** and the answer, and returns JSON `correct` / `supported` / `unsupported_claims` / `reason`. Rubric (full text in `evaluate.py`, `JUDGE_RUBRIC`): *correct* = the reference's key facts with no contradiction, or for unanswerable questions a refusal that doesn't supply the missing answer; *supported* = every factual claim, including law names and decree numbers, is in the passages.
@@ -116,7 +146,7 @@ Unanswerable question **q31**: *"My car is 6 years old. How often does it need t
 | correct | 23/24 = 0.96 | 0.65 | q22 (judge 0, me 1) |
 | supported | 17/24 = 0.71 | 0.11 | q20, q26, q31, q32, q34, q36 (judge 0, me 1); q35 (judge 1, me 0) |
 
-  *TODO(PK): your interpretation.* Facts: on *correct* the judge only differs on q22, where it counted the driver's duties from the reference as missing in an answer about passengers. On *supported* the judge is stricter than me on harmless extras (q26's "31–40 km/h over") and on refusals that name where the rule lives (Código Penal, DGT, insurance law); it is more lenient on q35, where it missed the unsupported "no tests needed" claim I marked 0. κ for *supported* is low partly because almost every answer is supported (few 0s), so a handful of disagreements weighs heavily.
+  I trust the judge for correctness, but not for supportedness until the rubric is tightened to allow refusals that name the relevant authority. On *correct* the judge only differs on q22, where it counted the driver's duties from the reference as missing in an answer about passengers. On *supported* the judge is stricter than me on harmless extras (q26's "31–40 km/h over") and on refusals that name where the rule lives (Código Penal, DGT, insurance law); it is more lenient on q35, where it missed the unsupported "no tests needed" claim I marked 0. κ for *supported* is low partly because almost every answer is supported (few 0s), so a handful of disagreements weighs heavily.
 
 - **Results** (`eval/summary.json`, `eval/results.csv`; agent `gemini-3.5-flash-lite`, search design G):
 
@@ -133,16 +163,23 @@ Unanswerable question **q31**: *"My car is 6 years old. How often does it need t
 | Code checks: expected passage retrieved / cited | 29/30 / 29/30 (q30 missed) |
 | Citation guardrail fired | 0 (5 in run 1, before the parser fix) |
 
-  Judge models: `gemini-3-flash-preview` graded 10 answers; it then kept failing (free-tier limit / overload) and **27 verdicts came from the Groq fallback `gpt-oss-120b`**. Several "unsupported" verdicts on refusals are debatable (e.g. q31's "not specified in the LSV, RGC or RGCond" is a statement about the corpus, not a legal fact), which is what your own grades should test. *TODO(PK).*
+  Judge models: `gemini-3-flash-preview` graded 10 answers; it then kept failing (free-tier limit / overload) and **27 verdicts came from the Groq fallback `gpt-oss-120b`**. Several "unsupported" verdicts on refusals are debatable (e.g. q31's "not specified in the LSV, RGC or RGCond" is a statement about the corpus, not a legal fact); my own grades disagree with all of them (see agreement above).
 
 ## Failures
 
-*TODO(PK): classify each failure yourself (retrieval miss, wrong answer from the right passage, unsupported claim, wrong refusal, bad test question).* Suggested by the code (`suggested_cause` in `eval/results.csv`): 8 × unsupported claim (q19, q20, q26, q31, q32, q34, q35, q36), 1 × wrong answer from the right passage (q22). Points to check: q35 (UAE licence) answered from the general exchange articles instead of saying the corpus doesn't name a UAE agreement, the one real missed refusal; q22 left out the hazard-light / pre-signalling duty (is the reference too demanding?); q26's "35 km/h over" is arithmetic, not a claim from the text (judge too strict?); refusals often name where the rule lives (Código Penal, insurance authorities), which the judge counts as unsupported. Run 1 also showed a refusal naming "Real Decreto 920/2017" from memory and the guardrail false positive on q20.
+| Question | What happened | Cause |
+|---|---|---|
+| q35 (unanswerable) | Answered the UAE licence exchange instead of refusing, and claimed no tests are needed. The passages only say an exchange depends on an agreement; they never name the UAE. | Unsupported claim |
+| q19 | Correct 2-year rule, plus an uncited sentence saying very serious offences take longer, which no passage says. | Unsupported claim |
+| q22 | Judged wrong for leaving out the driver's hazard-light / warning-device duty, but the question asked what the *passengers* should do. My reference included the driver's duties, which the question didn't ask for. | Bad test question |
+| q26 | Right fine (300 €) and points (2), but it described the band as "31–40 km/h over" when the table's 151–170 km/h band on a 120 road is 31–50 over. | Wrong answer from the right passage |
+
+The judge also marked the refusals of q31, q32, q34 and q36 as unsupported because they name where the rule lives (Código Penal, DGT, insurance legislation). I graded them as supported: they refuse correctly and only point the user to the right authority. I record these as a **judge-calibration issue, not an assistant failure**.
 
 ## Decision
 
-*TODO(PK): would you let users rely on it, for what, with which safeguard?* Cost and latency per question (final run): **6,208 input + 143 output tokens** for the agent on average, **13.6 s mean, 35.5 s max**, plus ~1 query embedding per search; the judge adds ~3,400 tokens per graded answer (evaluation only).
+Yes, I would let drivers rely on it for routine Spanish driving regulations (limits, points, fines, licence ages and validity), always with a direct BOE citation for every claim and a disclaimer that it is a guide, not legal advice. Foreign licence exchanges and other high-risk or ambiguous cases should require human verification before a definitive answer is given: q35 shows the agent can still answer one of those confidently from general articles that don't cover the user's case. Cost and latency per question (final run): **6,208 input + 143 output tokens** for the agent on average, **13.6 s mean, 35.5 s max**, plus ~1 query embedding per search; the judge adds ~3,400 tokens per graded answer (evaluation only).
 
 ## AI use
 
-*TODO(PK): required by the brief. Say which AI tool you used and for what (e.g. writing and debugging the code, the BOE extraction fixes, drafting candidate questions and reference answers that you then checked against the articles and rewrote), and which decisions were yours.*
+I used Claude to write and debug the code (BOE extraction and cleaning, chunking, the MCP server, the LangChain agent and guardrails, the evaluation pipeline), to compare the retrieval designs, and to draft the test questions and reference answers from the articles. It also drafted the factual sections of this report. The decisions and judgements are mine: the use case and corpus, keeping design G, the human grades of 24 answers (Claude laid out the evidence for each; q35's grade followed its advice, which I accepted), the failure labels, how far I trust the judge, and the final decision.
